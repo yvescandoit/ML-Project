@@ -1,0 +1,157 @@
+---
+title: "Testing ML Prediction Models"
+author: "Raghav Pradhan"
+date: "2025-01-29"
+output: html_document
+---
+
+## Synopsis
+
+The goal of this project is to develop a predictive model to determine how individuals performed an exercise in the training and test dataset.
+
+In this project, I will be training a number of Machine Learning Prediction models also providing a detailed report outlining my model-building process, how 
+cross-validation was applied and the accuracy behind those Prediction models. Additionally, I will apply my most accurate predictive model to predict the 
+outcomes for 20 distinct test cases.
+
+## Background of the Data
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These
+type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find
+patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely
+quantify how well they do it. 
+
+In this project, my goal will be to use the data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked
+to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The training data for this project are available here:
+
+[Training Dataset](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+The test data are available here:
+
+[Test dataset](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+## Environment Preparation
+
+This includes all the Packages that I have used in this project and are required in order to be reproduced.
+
+```{r, results='hide',message=FALSE,warning=FALSE}
+require(caret) #Important Packages for training Models of different types
+require(rpart)
+require(rattle)
+require(gbm)
+require(randomForest)
+require(knitr)
+```
+
+## Cleaning & Exploring Dataset
+
+Now after setting up the environment let's get started with loading the dataset into our environment
+
+```{r}
+traindat <- read.csv("pml-training.csv")   #reading the training data
+testdat <- read.csv("pml-testing.csv")     #reading the testing data
+dim(traindat) 
+```
+
+after exploring the dataset I see a lot of variables that have Near Zero Variances which can affect our Prediction models, so the best thing is to get rid of them.
+
+```{r}
+novar  <- nearZeroVar(traindat)
+traindat <- traindat[,-novar]   #getting rid of all the near zero variance columns 
+```
+
+Now I also need to get rid of the columns that have NA values in them,for this I will be setting a 80% threashold for NA, anymore than that will be withdrawn from the
+data set.
+
+```{r}
+NO_NA <- sapply(traindat,function(x) mean(is.na(x)) > 0.8) #we iterate a function over the cols through which we 
+                                                           #get a logical output which shows true if more than 0.8 Mean NA 
+
+traindat <- traindat[,NO_NA == FALSE]    #getting rid of all the cols that are TRUE(ie More than 80% NA)
+```
+
+As discussed earlier we need a validation set as well, so I will be dividing the dataset into Two sets **training** & **validation** set.
+
+```{r}
+data <- createDataPartition(traindat$classe,p = 0.70,list = FALSE) #splitting the data set into 70% train and 30% validation 
+training <- traindat[data,]
+validation <- traindat[-data,]
+
+training1 <- training[,-(1:5)]              #getting rid of meta data
+validation1 <- validation[,-(1:5)]
+```
+
+
+## Model Training
+
+I will be going with Three Machine Learning Models to train my Predictive Models & the Model that performs the best out of these 3 will be the predicting the test data
+
+### Decision Tree
+
+*Decision Tree* works by asking a series of decisions making a flow chart in the end, we start with a big group of data and ask questions about different variables to
+split the data into smaller, more homogenous groups. This helps us predict outcomes more accurately. Unlike other cross validation models, this one takes the least 
+time to train. 
+
+```{r}
+set.seed(101)
+train_dt <- rpart(classe~.,data = training1,method = "class")  #training the model (rpart package)
+fancyRpartPlot(train_dt)                                       #plotting the model (rattle package)
+
+```
+
+Now after plotting the data let us now try to predict our validation dataset.
+
+```{r}
+pred_dt <- predict(train_dt, validation1,type = "class")
+conf_mat_dt <- confusionMatrix(table(pred_dt,validation$classe))
+conf_mat_dt
+```
+
+we see that this model has accuracy of **0.6911**  which is typically not that high, so let us proceed with another model.
+
+### Random Forest
+
+*Random Forest* works by taking a lot of samples, creating many decision trees and then combining their predictions to make a final decision. The key idea behind Random
+Forest is that by combining the results from many trees, it can produce more accurate predictions than individual decision trees. This Model takes alot of time to train
+compared to other model.
+
+```{r}
+set.seed(100)
+trcon <- trainControl(method = "cv",number = 5) #k-means cross validation 5 times
+train_rf <- train(classe~., data = training1,method = "rf",trControl = trcon,verbose = FALSE) #training the model(randomForest Package)
+pred_rf <- predict(train_rf,validation1)
+conf_mat_rf <- confusionMatrix(table(pred_rf,validation1$classe))
+conf_mat_rf
+```
+
+This model has a accuracy of 0.9942 , so it almost predicted all of it correctly.
+
+### GBM
+
+*Gradient Boosting Machine* (GBM) is another powerful machine learning algorithm that works by building an ensemble of decision trees. However, unlike Random Forest,
+which builds trees independently and averages their predictions, GBM builds trees sequentially where it looks after the error of the first tree and builds another one
+focusing on minimising those errors(residuals).
+
+```{r}
+set.seed(102)
+trcon <- trainControl(method = "cv",number = 5)
+train_gbm <- train(classe~., data = training1,method = "gbm",trControl = trcon,verbose = FALSE)
+pred_gbm <- predict(train_gbm,validation1)
+conf_mat_gdm <- confusionMatrix(table(pred_gbm,validation1$classe))
+conf_mat_gdm
+```
+
+We see that the Model has an accuracy of 0.9568 , which is very good but not as accurate as the Random Forest model.
+
+**So, after training models in three different Machine Learning Algorithm we see that the most accurate prediction Model is the Random forest Model.**
+
+## Final Prediction using the Random Forest on the Testing Data
+
+I will now apply my most accurate predictive model that is the **Random Forest Model** to predict the outcomes for 20 distinct test cases.
+
+```{r}
+pred_test <- predict(train_rf,testdat)
+pred_test
+
+```
